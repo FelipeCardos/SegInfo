@@ -4,6 +4,16 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Set;
+import java.io.FileInputStream;  
+import java.io.FileOutputStream;
+import java.security.KeyStore;
+
+import javax.crypto.Cipher;
+import javax.crypto.CipherOutputStream;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import java.security.cert.Certificate;
+
 
 public class MyCloud {
 
@@ -43,13 +53,55 @@ public class MyCloud {
               sendToServer.add(args[2]);
         }
 
-        for ()
+        //for ()
 
 
 
 
 
         return null;
+    }
+
+    public boolean handleS (ArrayList listOfFiles){
+        for(int i=0;i<listOfFiles.length();i++){
+            File file = new File(listOfFiles.get(i));
+            //Verifico se ficheiro existe e se é um ficheiro        
+            if (file.exists() && file.isFile()) {
+                assina(listOfFiles.get(i));
+            } else {
+                String error = "File "+listOfFiles.get(i)+" not found";
+                return false;
+            }
+        }  
+        return true;
+    } 
+
+    private boolean assina(String fileName){
+        FileInputStream kfile = new FileInputStream("keystore.si");
+        KeyStore kstore = KeyStore.getInstance("PKCS12");
+        kstore.load(kfile,"123456".toCharArray());
+        Key myPrivateKey = kstore.getKey("si", "123456".toCharArray());
+
+        try {
+            FileInputStream file = new FileInputStream(fileName);            
+        } catch (Exception e) {
+            String error = "File not found";
+        }
+    	byte[] buffer = new byte[16];
+
+        Signature s = Signature.getInstance("SHA256withRSA");
+    	s.initSign((PrivateKey) myPrivateKey);
+    	int n;
+    	while((n = file.read(buffer))!=-1) {
+    		s.update(buffer,0,n);
+    	}
+    	FileOutputStream fileAssinatura = new FileOutputStream("a.assinatura");
+    	fileAssinatura.write(s.sign());
+    	fileAssinatura.close();
+    	file.close();
+
+        return true;
+
     }
 
     public MyCloud() {
