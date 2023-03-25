@@ -1,13 +1,12 @@
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.net.Socket;
-import java.security.InvalidKeyException;
-import java.security.Key;
-import java.security.NoSuchAlgorithmException;
-import java.security.PublicKey;
+import java.security.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Objects;
@@ -15,20 +14,18 @@ import java.util.Set;
 
 public class MyCloud {
 
-    private Socket socket;
-    private static DataOutputStream dataOutputStream = null;
-    private static DataInputStream dataInputStream = null;
-    private static ObjectOutputStream objectOutputStream = null;
-    private static ObjectInputStream objectInputStream = null;
+    private Socket clientSocket;
     private ArrayList<File> files = new ArrayList<>();
 
-    public static void main(String[] args) {
+    private KeyPair clientKeyPair;
+    private static ObjectOutputStream objectOutputStream = null;
+    private static ObjectInputStream objectInputStream = null;
+
+    public static void main(String[] args) throws IOException, NoSuchAlgorithmException, IllegalBlockSizeException, BadPaddingException {
         MyCloud m = new MyCloud(args);
     }
 
-
-
-    public MyCloud(String[] args) {
+    public MyCloud(String[] args) throws IOException, NoSuchAlgorithmException, IllegalBlockSizeException, BadPaddingException {
 
         ArrayList<Object> checked = checkMyCloudArgs(args);
 
@@ -43,29 +40,32 @@ public class MyCloud {
             String server = (String) checked.get(2);
             int port = Integer.parseInt((String) checked.get(3));
 
-            this.socket = new Socket(server, port);
-            dataInputStream = new DataInputStream(socket.getInputStream());
-            dataOutputStream = new DataOutputStream(socket.getOutputStream());
-            objectInputStream = new ObjectInputStream(socket.getInputStream());
+            try {
+                this.clientSocket = new Socket(server, port);
+                System.out.println("Client connected");
+                objectOutputStream = new ObjectOutputStream(this.clientSocket.getOutputStream());
+                objectInputStream = new ObjectInputStream(this.clientSocket.getInputStream());
+
+            } catch (IOException e) {
+                System.out.println("Server não esta ativo.");
+                throw new RuntimeException(e);
+            }
+
 
             System.out.println("Sending Data...");
+
+            System.out.println(checked.get(4));
 
             switch ((String) checked.get(4)) {
                 case "-c":
                     cFunction();
-                case "-s":
-                    sFunction();
             }
-
-
-
-
-        } catch (IOException | ClassNotFoundException | NoSuchAlgorithmException | NoSuchPaddingException |
-                 IllegalBlockSizeException | BadPaddingException | InvalidKeyException e) {
+        } catch (IOException | ClassNotFoundException | NoSuchPaddingException | InvalidKeyException |
+                 InvalidAlgorithmParameterException | NoSuchProviderException e) {
             throw new RuntimeException(e);
         }
-    }
 
+    }
 
     private ArrayList<Object> checkMyCloudArgs(String[] args) {
 
@@ -106,12 +106,13 @@ public class MyCloud {
             } else {
                 sendToServer.add(args[2-counter]);
             }
+            this.files.clear();
 
             if (error.isEmpty()) {
                 for (int x = 3; x < args.length; x++) {
                     File file = new File(args[x]);
                     if (!file.exists()) {
-                        error.append(" Ficheiro ").append(args[x]).append(" não existe.");
+                        System.out.println("Ficheiro "+ args[x] + " nao existe");
                     } else {
                         this.files.add(file);
                     }
@@ -130,16 +131,37 @@ public class MyCloud {
 
     }
 
-    private void cFunction () throws IOException, ClassNotFoundException, NoSuchAlgorithmException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, InvalidKeyException {
-        dataOutputStream.writeUTF("-c");
-        dataOutputStream.flush();
+    private void cFunction () throws IOException, NoSuchAlgorithmException, ClassNotFoundException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException, InvalidAlgorithmParameterException, NoSuchProviderException {
+        ArrayList<File> filesToServer = new ArrayList<>();
 
-        PublicKey publicKey = (PublicKey) objectInputStream.readObject();
+        objectOutputStream.writeObject("-c");
 
-        Key key = Utils.generatorSymmetricKey();
+        if (this.clientKeyPair == null) {
+            this.clientKeyPair = CryptoUtils.generateKeyPair();
+        }
 
-        for (File file: this.files) {
-            byte[] encryptFileBytes =  Utils.encryptFile(file, key);
+        Key symKey = CryptoUtils.generateSymmetricKey();
+
+        objectOutputStream.writeObject(files.size());
+        for (File f: this.files) {
+            objectOutputStream.writeObject(f.getName());
+            boolean boolFileInServer = (boolean) objectInputStream.readObject();
+            if (boolFileInServer) {
+                filesToServer.add(f);
+
+            }
+        }
+
+        byte[] wrappedKey = CryptoUtils.encryptKey(symKey, this.clientKeyPair.getPublic());
+
+        objectOutputStream.writeObject(filesToServer.size());
+        for (File f: filesToServer) {
+            byte[] dataToSend = CryptoUtils.encryptFile(f, symKey);
+            objectOutputStream.writeObject(f.getName());
+            objectOutputStream.writeObject(dataToSend);
+            objectOutputStream.writeObject(wrappedKey);
+
+
         }
 
 
@@ -148,8 +170,8 @@ public class MyCloud {
 
 
 
-    }
 
-    private void sFunction() {
+
+
     }
 }

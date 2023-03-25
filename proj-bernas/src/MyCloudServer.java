@@ -1,102 +1,126 @@
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.ObjectOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 public class MyCloudServer {
 
     private ServerSocket serverSocket;
 
-    private static DataOutputStream dataOutputStream = null;
-    private static DataInputStream dataInputStream = null;
-    private static ObjectOutputStream objectOutputStream = null;
-
-
-
-    private KeyPair keyPair;
-
-
-
-
-
     public static void main(String[] args) throws IOException {
 
-        ServerSocket serverSocket = new ServerSocket(23456);
-        MyCloudServer server = new MyCloudServer(serverSocket);
-        server.startServer();
+        MyCloudServer server = new MyCloudServer();
+        server.runServer();
 
     }
-
-    public MyCloudServer(ServerSocket serverSocket) {
-        this.serverSocket = serverSocket;
+    public MyCloudServer() throws IOException {
+        this.startServer();
     }
 
-    public void startServer(){
+    private void startServer(){
+        System.out.println("Starting Server");
+        try {
+            this.serverSocket = new ServerSocket(23455);
+        } catch (IOException e) {
+            System.err.println(e.getMessage());
+            System.exit(-1);
+        }
+    }
 
-        try{
-            System.out.println("Starting Server");
-            while (!serverSocket.isClosed()) {
+    private void runServer() throws IOException {
+        System.out.println("Waiting for clients");
+        while(true) {
+            try {
+                Socket clientSocket = this.serverSocket.accept();
+                System.out.println("Client connected");
+                ServerThread serverThread = new ServerThread(clientSocket);
+                serverThread.start();
 
 
-                Socket socket = serverSocket.accept();
-                System.out.println("New Client Connected");
+            } catch (IOException e) {
+                this.closeServer();
+                throw new RuntimeException(e);
 
-                dataInputStream = new DataInputStream(socket.getInputStream());
-                dataOutputStream = new DataOutputStream(socket.getOutputStream());
-                objectOutputStream = new ObjectOutputStream(socket.getOutputStream());
+            }
+        }
+    }
 
 
-                String type = dataInputStream.readUTF();
+    private void closeServer () throws IOException {
+        this.serverSocket.close();
+    }
+
+    static class ServerThread extends Thread {
+
+
+        private final ObjectOutputStream outStream;
+        private final ObjectInputStream inStream;
+        protected ArrayList<File> files = new ArrayList<>();
+        private Socket socket = null;
+
+        ServerThread(Socket inSoc) throws IOException {
+            socket = inSoc;
+            this.outStream = new ObjectOutputStream(socket.getOutputStream());
+            this.inStream = new ObjectInputStream(socket.getInputStream());
+        }
+
+        public void run() {
+            try {
+                String type = (String) inStream.readObject();
+                System.out.println(type);
+
                 switch (type) {
                     case "-c":
-                        cServerFunction();
+                        cFunction();
+                }
+            } catch (IOException | ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+
+        private void cFunction() throws ClassNotFoundException {
+            try {
+                int nrFiles = (int) this.inStream.readObject();
+                System.out.println(nrFiles);
+
+                for (int x = 0; x < nrFiles; x++) {
+                    String f = (String) inStream.readObject();
+                    boolean bool = true;
+
+                    for (File file: this.files) {
+                        if (file.getName().equals(f)) {
+                            bool = false;
+                            outStream.writeObject(false);
+                            break;
+                        }
+                    }
+                    if (bool) {
+                        outStream.writeObject(true);
+                    }
                 }
 
-/*                ClientHandler clientHandler = new ClientHandler(socket);
+                int nrFilesToServer = (int) inStream.readObject();;
+                for (int x = 0; x < nrFilesToServer; x++) {
 
-                Thread thread = new Thread(clientHandler);
-                thread.start();*/
+                    String fileName = (String) inStream.readObject();
+                    File savedFile = Utils.createFile("serverFiles/"+fileName+".cifrado");
+                    byte[] dataInFile = (byte[]) inStream.readObject();
+                    Utils.transferDataToFile(savedFile, dataInFile);
 
+
+                    byte[] dataInKey = (byte[]) inStream.readObject();
+                    File savedKeyFile = Utils.createFile("serverFiles/"+fileName+".chave_secreta");
+                    Utils.transferDataToFile(savedKeyFile, dataInKey);
+
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
-        } catch (IOException | NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
         }
     }
 
-    public void closeServerSocket() {
-        try {
-            if (serverSocket != null) {
-                serverSocket.close();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
 
-    private void generateKeyPair() throws NoSuchAlgorithmException {
-        KeyPairGenerator kpGen = KeyPairGenerator.getInstance("RSA");
-        kpGen.initialize(1024);
-        this.keyPair = kpGen.generateKeyPair();
-    }
-
-    private void cServerFunction() throws NoSuchAlgorithmException, IOException {
-        if (this.keyPair == null) {
-            generateKeyPair();
-        }
-
-        objectOutputStream.writeObject(this.keyPair.getPublic());
-        objectOutputStream.flush();
-
-
-
-
-
-
-    }
 }
+
+
