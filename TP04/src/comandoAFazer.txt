@@ -1,1 +1,1 @@
-keytool.exe -genkeypair -keysize 2048 -alias maria -keyalg rsa -keystore keystore.maria -storetype PKCS12
+keytool.exe -genkeypair -keysize 2048 -alias si -keyalg rsa -keystore keystore.si -storetype PKCS12
