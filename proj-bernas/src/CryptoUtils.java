@@ -106,5 +106,14 @@ public class CryptoUtils {
         return c.unwrap(b, "AES", Cipher.SECRET_KEY);
     }
 
+    static void decryptFile(byte[] encryptedData, File outputFile, Key secretKey) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException, IOException {
+        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+        cipher.init(Cipher.DECRYPT_MODE, secretKey);
+        byte[] decryptedData = cipher.doFinal(encryptedData);
+        Files.write(outputFile.toPath(), decryptedData);
+    }
+
+
+
 
 }

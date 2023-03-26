@@ -92,6 +92,7 @@ public class MyCloudServer {
                 String[] filesInFolder = folder.list();
                 System.out.println(Arrays.toString(filesInFolder));
 
+
                 String type = (String) inStream.readObject();
                 System.out.println(type);
 
@@ -150,11 +151,7 @@ public class MyCloudServer {
                     boolean bool = true;
 
                     for (File file: this.files) {
-                        System.out.println(file.getName());
-                        System.out.println(f+".cifrado");
                         if (file.getName().equals(f+".cifrado")) {
-                            System.out.println(f+".cifrado");
-                            System.out.println("encontra-se no servidor");
                             bool = false;
                             outStream.writeObject(false);
                             break;
@@ -187,7 +184,30 @@ public class MyCloudServer {
             }
         }
 
-        private void gFunction() {
+        private void gFunction() throws IOException, ClassNotFoundException {
+            ArrayList<File> filesFromClient =(ArrayList<File>) inStream.readObject();
+            ArrayList<File> filesInServer = new ArrayList<>();
+
+            File folder = new File("serverFiles/"+userName);
+            File[] listOfFiles = folder.listFiles();
+
+            for (File file : listOfFiles) {
+                for (File f: filesFromClient) {
+                    if((f.getName()+".cifrado").equals(file.getName())) {
+
+                        byte[] cifradoBytes = Files.readAllBytes(Path.of(f.getName() + ".cifrado"));
+                        byte[] chaveBytes = Files.readAllBytes(Path.of(f.getName() + ".chave_secreta"));
+
+                        outStream.writeObject(cifradoBytes);
+                        outStream.writeObject(chaveBytes);
+
+                    }
+                }
+            }
+
+
+
+
 
         }
     }

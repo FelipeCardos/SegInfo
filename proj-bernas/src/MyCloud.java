@@ -251,7 +251,45 @@ public class MyCloud {
     }
 
 
-    private void gFunction() {
+    private void gFunction() throws IOException, ClassNotFoundException, InvalidKeySpecException, NoSuchAlgorithmException, InvalidAlgorithmParameterException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+        objectOutputStream.writeObject("-g");
+
+        ArrayList<File> filesToServer = new ArrayList<>(this.files);
+
+        File folder = new File("clientFiles/" + userName);
+        folder.mkdir();
+        String[] filesInFolder = folder.list();
+
+        for (String fileInClient: filesInFolder){
+            for (File file : this.files) {
+                if(file.getName().equals(fileInClient)) {
+                    System.out.println("Ficheiro ja esta na pasta");
+                    filesToServer.remove(file);
+                    break;
+                }
+            }
+        }
+
+        objectOutputStream.writeObject(filesToServer);
+
+        Key userKey = CryptoUtils.generateKeyFromPassword(this.password);
+
+        try {
+            while (true) {
+                byte[] cifradoBytes = (byte[]) objectInputStream.readObject();
+                byte[] chaveBytes = (byte[]) objectInputStream.readObject();
+
+                Key chave = CryptoUtils.decryptKey(chaveBytes, userKey);
+
+                File file = Utils.createFile("clientFiles/" + userName);
+
+                CryptoUtils.decryptFile(cifradoBytes, file, chave);
+
+            }
+        } finally {
+            System.exit(1);
+        }
+
 
     }
 }
