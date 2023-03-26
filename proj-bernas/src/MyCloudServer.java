@@ -208,7 +208,80 @@ public class MyCloudServer {
 
 
 
+            
+        }
+                private void eFunction() throws ClassNotFoundException {
+            try {
+                int nrFiles = (int) this.inStream.readObject();
+                System.out.println(nrFiles);
 
+                for (int x = 0; x < nrFiles; x++) {
+                    String f = (String) inStream.readObject();
+                    boolean bool = true;
+
+                    for (File file: this.files) {
+                        if (file.getName().equals(f)) {
+                            bool = false;
+                            outStream.writeObject(false);
+                            break;
+                        }
+                    }
+                    if (bool) {
+                        outStream.writeObject(true);
+                    }
+                }
+
+                int nrFilesToServer = (int) inStream.readObject();;
+                for (int x = 0; x < nrFilesToServer; x++) {
+
+                    String fileName = (String) inStream.readObject();
+                    File savedFile = Utils.createFile("serverFiles/"+fileName+".seguro");
+                    byte[] dataInFile = (byte[]) inStream.readObject();
+                    Utils.transferDataToFile(savedFile, dataInFile);
+
+
+                    byte[] dataInKey = (byte[]) inStream.readObject();
+                    File savedKeyFile = Utils.createFile("serverFiles/"+fileName+".chave_secreta");
+                    Utils.transferDataToFile(savedKeyFile, dataInKey);
+
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+                   private void sFunction() throws Exception{
+                String fileName = (String) inStream.readObject();
+                File savedFile = Utils.createFile("../serverFiles/" + fileName + ".assinatura");
+                byte[] dataInFile = (byte[]) inStream.readObject();
+                Utils.transferDataToFile(savedFile, dataInFile);
+                
+                VerificaAssinatura(fileName);
+        }
+
+        private void VerificaAssinatura(String fileName)throws Exception{
+            FileInputStream kfile = new FileInputStream("keystore.si");
+            KeyStore kstore = KeyStore.getInstance("PKCS12");
+            kstore.load(kfile,"123456".toCharArray());
+            Certificate cert= kstore.getCertificate("si");
+            
+            
+            FileInputStream file = new FileInputStream(fileName);
+            byte[] buffer = new byte[16];
+            Signature s = Signature.getInstance("SHA256withRSA");
+            s.initVerify(cert);
+            int n;
+            while((n = file.read(buffer))!=-1) {
+                s.update(buffer,0,n);
+            }
+            byte [] assinatura = new byte[256];
+            FileInputStream fileAssinatura = new FileInputStream(fileName+".assinado");
+            fileAssinatura.read(assinatura);
+            boolean b = s.verify(assinatura);
+            System.out.println(b);
+            
+            fileAssinatura.close();
+            file.close();
+    
         }
     }
 
