@@ -1,36 +1,25 @@
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
-import java.io.FileNotFoundException;
 import java.io.File;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.io.File;
 import java.net.Socket;
-import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Set;
-import java.io.FileInputStream;  
-import java.io.FileOutputStream;
-import java.security.KeyStore;
-import java.security.Key;
-import java.security.Signature;
-import java.security.PrivateKey;
+import java.security.*;
+import java.security.spec.InvalidKeySpecException;
+import java.util.*;
 
-
-import javax.crypto.Cipher;
-import javax.crypto.CipherOutputStream;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
-import java.security.cert.Certificate;
-import java.util.Arrays;
 public class MyCloud {
+
+
+    private String userName;
+    private String password;
 
     private Socket clientSocket;
     private ArrayList<File> files = new ArrayList<>();
 
-    private KeyPair clientKeyPair;
+
     private static ObjectOutputStream objectOutputStream = null;
     private static ObjectInputStream objectInputStream = null;
 
@@ -48,14 +37,14 @@ public class MyCloud {
         }
 
         try {
-            System.out.println("Client Started");
+            System.out.println("Inicio do Programa");
 
             String server = (String) checked.get(2);
             int port = Integer.parseInt((String) checked.get(3));
 
             try {
                 this.clientSocket = new Socket(server, port);
-                System.out.println("Client connected");
+                System.out.println("Cliente Conectado");
                 objectOutputStream = new ObjectOutputStream(this.clientSocket.getOutputStream());
                 objectInputStream = new ObjectInputStream(this.clientSocket.getInputStream());
 
@@ -64,21 +53,46 @@ public class MyCloud {
                 throw new RuntimeException(e);
             }
 
+            boolean auth = this.auth();
+            if (!auth) {
+                System.out.println("Cliente Nao Autenticado, Resete o Cliente");
+                System.exit(0);
+            }
 
-            System.out.println("Sending Data...");
+            System.out.println("Cliente Autenticado");
+
+
+            System.out.println("Transferir Dados...");
 
             System.out.println(checked.get(4));
 
             switch ((String) checked.get(4)) {
                 case "-c":
                     cFunction();
+                case "-g":
+                    gFunction();
             }
         } catch (IOException | ClassNotFoundException | NoSuchPaddingException | InvalidKeyException |
-                 InvalidAlgorithmParameterException | NoSuchProviderException e) {
+                 InvalidAlgorithmParameterException | NoSuchProviderException | InvalidKeySpecException e) {
             throw new RuntimeException(e);
         }
 
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     private ArrayList<Object> checkMyCloudArgs(String[] args) {
 
@@ -122,13 +136,17 @@ public class MyCloud {
             this.files.clear();
 
             if (error.isEmpty()) {
-                for (int x = 3; x < args.length; x++) {
-                    File file = new File(args[x]);
-                    if (!file.exists()) {
-                        System.out.println("Ficheiro "+ args[x] + " nao existe");
-                    } else {
-                        this.files.add(file);
+                if (args.length > 3) {
+                    for (int x = 3; x < args.length; x++) {
+                        File file = new File(args[x]);
+                        if (!file.exists()) {
+                            System.out.println("Ficheiro " + args[x] + " nao existe");
+                        } else {
+                            this.files.add(file);
+                        }
                     }
+                } else {
+                    error.append(" Nenhum ficheiro foi adicionado.");
                 }
             }
 
@@ -141,23 +159,61 @@ public class MyCloud {
         } else {
             return new ArrayList<>(Arrays.asList(false, error.toString()));
         }
-        String[] files = args[2].split(" ");
-        ArrayList<String> listOfFiles = new ArrayList<String>(Arrays.asList(files));
-        switch(args[2]){
-            case "-s":
-                handleS(listOfFiles);
-        } 
 
     }
 
-    private void cFunction () throws IOException, NoSuchAlgorithmException, ClassNotFoundException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException, InvalidAlgorithmParameterException, NoSuchProviderException {
+
+
+
+
+
+    private boolean auth() throws IOException, ClassNotFoundException {
+        boolean verified = false;
+        Scanner myObj = new Scanner(System.in);
+        System.out.println("Enter username:");
+        String userName = myObj.nextLine();
+        objectOutputStream.writeObject(userName);
+        boolean firstTime = (boolean) objectInputStream.readObject();
+        this.userName = userName;
+        if (firstTime) {
+            System.out.println("Enter password:");
+            String userPassword = myObj.nextLine();
+            objectOutputStream.writeObject(userPassword);
+            this.password = userPassword;
+            verified = true;
+        }
+        else {
+            int counter = 0;
+            while (counter < 3) {
+                counter++;
+                System.out.println("Enter password:");
+                String userPassword = myObj.nextLine();
+                objectOutputStream.writeObject(userPassword);
+                boolean correctPassword = (boolean) objectInputStream.readObject();
+                if (correctPassword) {
+                    this.password = userPassword;
+                    verified = true;
+                    break;
+                }
+
+            }
+        }
+
+        return verified;
+    }
+
+
+
+
+
+
+
+    private void cFunction () throws IOException, NoSuchAlgorithmException, ClassNotFoundException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException, InvalidAlgorithmParameterException, NoSuchProviderException, InvalidKeySpecException {
         ArrayList<File> filesToServer = new ArrayList<>();
 
         objectOutputStream.writeObject("-c");
 
-        if (this.clientKeyPair == null) {
-            this.clientKeyPair = CryptoUtils.generateKeyPair();
-        }
+        Key userKey = CryptoUtils.generateKeyFromPassword(this.password);
 
         Key symKey = CryptoUtils.generateSymmetricKey();
 
@@ -171,7 +227,7 @@ public class MyCloud {
             }
         }
 
-        byte[] wrappedKey = CryptoUtils.encryptKey(symKey, this.clientKeyPair.getPublic());
+        byte[] wrappedKey = CryptoUtils.encryptKey(symKey, userKey);
 
         objectOutputStream.writeObject(filesToServer.size());
         for (File f: filesToServer) {
@@ -183,55 +239,19 @@ public class MyCloud {
 
         }
 
-    }
-    
-    public static void handleS(ArrayList<String> listOfFiles) {
-        for (int i = 0; i < listOfFiles.size(); i++) {
-            File file = new File(listOfFiles.get(i));
-            // Verifico se ficheiro existe e se é um ficheiro        
-            if (file.exists() && file.isFile()) {
-                try {
-                    assina(listOfFiles.get(i));
-                } catch (Exception e) {
-                    System.err.println("Erro ao assinar arquivo " + listOfFiles.get(i) + ": " + e.getMessage());
-                    break;
-                }
-            } else {
-                System.err.println("Arquivo " + listOfFiles.get(i) + " não encontrado ou não é um arquivo.");
-                break;
-            }
-        }
-        
-    }
-    
-    private static boolean assina (String fileName)throws Exception{
-        FileInputStream kfile = new FileInputStream("keystore.si");
-        KeyStore kstore = KeyStore.getInstance("PKCS12");
-        kstore.load(kfile,"123456".toCharArray());
-        Key myPrivateKey = kstore.getKey("si", "123456".toCharArray());
 
-        FileInputStream file = null;
-        try {
-            file = new FileInputStream(fileName);
-        } catch (Exception e) {
-            String error = "File not found";
-        }
-        
-    	byte[] buffer = new byte[16];
 
-        Signature s = Signature.getInstance("SHA256withRSA");
-    	s.initSign((PrivateKey) myPrivateKey);
-    	int n;
-    	while((n = file.read(buffer))!=-1) {
-    		s.update(buffer,0,n);
-    	}
-    	FileOutputStream fileAssinatura = new FileOutputStream("a.assinatura");
-    	fileAssinatura.write(s.sign());
-    	fileAssinatura.close();
-    	file.close();
-        System.out.println();
-        return true;
+
+
+
+
+
+
 
     }
 
+
+    private void gFunction() {
+
+    }
 }

@@ -1,6 +1,11 @@
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -13,7 +18,6 @@ public class MyCloudServer {
         MyCloudServer server = new MyCloudServer();
         server.runServer();
 
-
     }
     public MyCloudServer() throws IOException {
         this.startServer();
@@ -22,7 +26,7 @@ public class MyCloudServer {
     private void startServer(){
         System.out.println("Starting Server");
         try {
-            this.serverSocket = new ServerSocket(23455);
+            this.serverSocket = new ServerSocket(23465);
         } catch (IOException e) {
             System.err.println(e.getMessage());
             System.exit(-1);
@@ -52,8 +56,20 @@ public class MyCloudServer {
         this.serverSocket.close();
     }
 
+
+
+
+
+
+
+
+
+
+
+
     static class ServerThread extends Thread {
 
+        private String userName;
 
         private final ObjectOutputStream outStream;
         private final ObjectInputStream inStream;
@@ -68,21 +84,64 @@ public class MyCloudServer {
 
         public void run() {
             try {
+                serverAuth();
+                System.out.println("Client Authed");
+
+                File folder = new File("serverFiles/" + userName);
+                String[] filesInFolder = folder.list();
+                System.out.println(Arrays.toString(filesInFolder));
+
                 String type = (String) inStream.readObject();
                 System.out.println(type);
 
                 switch (type) {
                     case "-c":
                         cFunction();
+                    case "-g":
+                        gFunction();
                 }
-            } catch (IOException | ClassNotFoundException e) {
+            } catch (IOException | ClassNotFoundException | NoSuchAlgorithmException e) {
                 e.printStackTrace();
+            }
+        }
+
+
+        private void serverAuth() throws IOException, ClassNotFoundException, NoSuchAlgorithmException {
+            userName = (String) inStream.readObject();
+
+            if (Files.isDirectory(Path.of("serverFiles/" + userName))) {
+                outStream.writeObject(false);
+                int counter = 0;
+                while (counter < 3) {
+                    counter++;
+                    String tryPassword = String.valueOf(inStream.readObject());
+                    String tryPasswordHashed = Utils.toHexString(CryptoUtils.getSHA(tryPassword));
+                    byte[] passwordBytes = Files.readAllBytes(Paths.get("serverFiles/"+userName+"/"+userName+".password"));
+                    String password = new String(passwordBytes);
+                    System.out.println(password.equals(tryPasswordHashed));
+                    if (password.equals(tryPasswordHashed)){
+                        outStream.writeObject(true);
+                    } else {
+                        outStream.writeObject(false);
+                    }
+
+                }
+            } else {
+                outStream.writeObject(true);
+                File theDir = new File("serverFiles/"+userName);
+                theDir.mkdir();
+                String userPassword = (String) inStream.readObject();
+                String userPasswordHashed = Utils.toHexString(CryptoUtils.getSHA(userPassword));
+                byte[] userPasswordHashedBytes = userPasswordHashed.getBytes(StandardCharsets.UTF_8);
+                File userpasswordFile = Utils.createFile("serverFiles/"+userName+"/"+userName+".password");
+                Utils.transferDataToFile(userpasswordFile, userPasswordHashedBytes);
             }
         }
 
         private void cFunction() throws ClassNotFoundException {
             try {
                 int nrFiles = (int) this.inStream.readObject();
+                System.out.println("___________________________________");
                 System.out.println(nrFiles);
 
                 for (int x = 0; x < nrFiles; x++) {
@@ -90,7 +149,11 @@ public class MyCloudServer {
                     boolean bool = true;
 
                     for (File file: this.files) {
-                        if (file.getName().equals(f)) {
+                        System.out.println(file.getName());
+                        System.out.println(f+".cifrado");
+                        if (file.getName().equals(f+".cifrado")) {
+                            System.out.println(f+".cifrado");
+                            System.out.println("encontra-se no servidor");
                             bool = false;
                             outStream.writeObject(false);
                             break;
@@ -99,19 +162,22 @@ public class MyCloudServer {
                     if (bool) {
                         outStream.writeObject(true);
                     }
+
                 }
+
+                System.out.println("---------------------------------");
 
                 int nrFilesToServer = (int) inStream.readObject();;
                 for (int x = 0; x < nrFilesToServer; x++) {
 
                     String fileName = (String) inStream.readObject();
-                    File savedFile = Utils.createFile("serverFiles/"+fileName+".cifrado");
+                    File savedFile = Utils.createFile("serverFiles/"+this.userName+"/"+fileName+".cifrado");
                     byte[] dataInFile = (byte[]) inStream.readObject();
                     Utils.transferDataToFile(savedFile, dataInFile);
 
 
                     byte[] dataInKey = (byte[]) inStream.readObject();
-                    File savedKeyFile = Utils.createFile("serverFiles/"+fileName+".chave_secreta");
+                    File savedKeyFile = Utils.createFile("serverFiles/"+this.userName+"/"+fileName+".chave_secreta");
                     Utils.transferDataToFile(savedKeyFile, dataInKey);
 
                 }
@@ -119,34 +185,13 @@ public class MyCloudServer {
                 throw new RuntimeException(e);
             }
         }
-    }
-    
-    public static void VerificaAssinatura(){
-        FileInputStream kfile = new FileInputStream("keystore.alice");
-    	KeyStore kstore = KeyStore.getInstance("PKCS12");
-    	kstore.load(kfile,"123456".toCharArray());
-    	Certificate cert= kstore.getCertificate("alice");
-    	
-    	
-    	FileInputStream file = new FileInputStream("a.txt");
-    	byte[] buffer = new byte[16];
-    	Signature s = Signature.getInstance("SHA256withRSA");
-    	s.initVerify(cert);
-    	int n;
-    	while((n = file.read(buffer))!=-1) {
-    		s.update(buffer,0,n);
-    	}
-    	byte [] assinatura = new byte[256];
-    	FileInputStream fileAssinatura = new FileInputStream("a.assinatura");
-    	fileAssinatura.read(assinatura);
-    	boolean b = s.verify(assinatura);
-    	System.out.println(b);
-    	
-    	fileAssinatura.close();
-    	file.close();
-	}
 
-    
+        private void gFunction() {
+
+        }
+    }
+
+
 }
 
 
