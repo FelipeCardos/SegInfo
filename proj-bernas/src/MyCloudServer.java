@@ -15,18 +15,19 @@ public class MyCloudServer {
 
     public static void main(String[] args) throws IOException {
 
-        MyCloudServer server = new MyCloudServer();
+        MyCloudServer server = new MyCloudServer(args);
         server.runServer();
 
     }
-    public MyCloudServer() throws IOException {
-        this.startServer();
+    public MyCloudServer(String[] args) throws IOException {
+        this.startServer(args);
     }
 
-    private void startServer(){
+    private void startServer(String[] args){
         System.out.println("Starting Server");
         try {
-            this.serverSocket = new ServerSocket(23465);
+            int port = Integer.parseInt(args[0]);
+            this.serverSocket = new ServerSocket(port);
         } catch (IOException e) {
             System.err.println(e.getMessage());
             System.exit(-1);
