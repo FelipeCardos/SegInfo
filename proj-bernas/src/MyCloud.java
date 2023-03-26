@@ -184,6 +184,7 @@ public class MyCloud {
         }
 
     }
+    
     public static void handleS(ArrayList<String> listOfFiles) {
         for (int i = 0; i < listOfFiles.size(); i++) {
             File file = new File(listOfFiles.get(i));
