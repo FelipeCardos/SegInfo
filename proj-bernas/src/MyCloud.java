@@ -71,6 +71,10 @@ public class MyCloud {
                     cFunction();
                 case "-g":
                     gFunction();
+                case "-s":
+                    sFunction(files);
+                case "-e":
+                    eFunction();
             }
         } catch (IOException | ClassNotFoundException | NoSuchPaddingException | InvalidKeyException |
                  InvalidAlgorithmParameterException | NoSuchProviderException | InvalidKeySpecException e) {
@@ -292,4 +296,90 @@ public class MyCloud {
 
 
     }
+        public static void sFunction(ArrayList<File> listOfFiles) throws Exception {
+        objectOutputStream.writeObject("-s");
+        for (int i = 0; i < listOfFiles.size(); i++) {
+            // Verifico se ficheiro existe e se é um ficheiro
+            if (listOfFiles.get(i).exists()) {
+                try {
+                    objectOutputStream.writeObject(listOfFiles.get(i).getName());
+                    assina(listOfFiles.get(i));
+
+                } catch (Exception e) {
+                    System.err.println("Erro ao assinar arquivo " + listOfFiles.get(i) + ": " + e.getMessage());
+                    break;
+                }
+            } else {
+                System.err.println("Arquivo " + listOfFiles.get(i) + " não encontrado ou não é um arquivo.");
+                break;
+            }
+        }
+
+    }
+
+    private static void assina(File fileName) throws Exception {
+        FileInputStream kfile = new FileInputStream("keystore.si");
+        KeyStore kstore = KeyStore.getInstance("PKCS12");
+        kstore.load(kfile, "123456".toCharArray());
+        Key myPrivateKey = kstore.getKey("si", "123456".toCharArray());
+
+        FileInputStream file = null;
+        try {
+            file = new FileInputStream(fileName.getName());
+        } catch (Exception e) {
+            String error = "File not found";
+        }
+
+        byte[] buffer = new byte[16];
+
+        Signature s = Signature.getInstance("SHA256withRSA");
+        s.initSign((PrivateKey) myPrivateKey);
+        int n;
+        while ((n = file.read(buffer)) != -1) {
+            s.update(buffer, 0, n);
+        }
+        objectOutputStream.writeObject(s.sign());
+        file.close();
+
+    }
+    private void eFunction () throws IOException, NoSuchAlgorithmException, ClassNotFoundException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException, InvalidAlgorithmParameterException, NoSuchProviderException, KeyStoreException, CertificateException, UnrecoverableKeyException {
+        ArrayList<File> filesToServer = new ArrayList<>();
+        FileInputStream kfile = new FileInputStream("keystore.si");
+        KeyStore kstore = KeyStore.getInstance("PKCS12");
+        kstore.load(kfile, "123456".toCharArray());
+        Key myPrivateKey = kstore.getKey("si", "123456".toCharArray());
+        Signature s = Signature.getInstance("SHA256withRSA");
+        s.initSign((PrivateKey) myPrivateKey);
+
+        objectOutputStream.writeObject("-e");
+
+        if (this.clientKeyPair == null) {
+            this.clientKeyPair = CryptoUtils.generateKeyPair();
+        }
+
+        Key symKey = CryptoUtils.generateSymmetricKey();
+
+        objectOutputStream.writeObject(files.size());
+        for (File f: this.files) {
+            objectOutputStream.writeObject(f.getName());
+            boolean boolFileInServer = (boolean) objectInputStream.readObject();
+            if (boolFileInServer) {
+                filesToServer.add(f);
+
+            }
+        }
+
+        byte[] wrappedKey = CryptoUtils.encryptKey(symKey, this.clientKeyPair.getPublic());
+
+        objectOutputStream.writeObject(filesToServer.size());
+        for (File f: filesToServer) {
+            byte[] dataToSend = CryptoUtils.encryptFile(f, symKey);
+            objectOutputStream.writeObject(f.getName());
+            objectOutputStream.writeObject(dataToSend);
+            objectOutputStream.writeObject(wrappedKey);
+
+
+        }
+    }
+
 }
