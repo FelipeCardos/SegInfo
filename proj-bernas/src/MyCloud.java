@@ -1,6 +1,11 @@
+import javax.crypto.BadPaddingException;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 import java.io.FileNotFoundException;
-import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.File;
 import java.net.Socket;
 import java.net.UnknownHostException;
@@ -41,9 +46,9 @@ public class MyCloud {
         if (args[0] != "-a") {
             String error = "Tem de identificar o servidor ao qual quer-se conectar";
 
-        } else {
-            sendToServer.add(args[0]);
-        }
+            } else {
+                sendToServer.add(args[0]);
+            }
 
 
         String[] serverId = args[1].split(":");
@@ -60,7 +65,7 @@ public class MyCloud {
         } else {
               sendToServer.add(args[2]);
         }
-        String[] files = args[3].split(" ");
+        String[] files = args[2].split(" ");
         ArrayList<String> listOfFiles = new ArrayList<String>(Arrays.asList(files));
         switch(args[2]){
             case "-s":
@@ -93,6 +98,7 @@ public class MyCloud {
         }
         
     }
+    
     private static boolean assina (String fileName)throws Exception{
         FileInputStream kfile = new FileInputStream("keystore.si");
         KeyStore kstore = KeyStore.getInstance("PKCS12");
@@ -114,11 +120,11 @@ public class MyCloud {
     	while((n = file.read(buffer))!=-1) {
     		s.update(buffer,0,n);
     	}
-    	FileOutputStream fileAssinatura = new FileOutputStream(fileName + ".assinatura");
+    	FileOutputStream fileAssinatura = new FileOutputStream("a.assinatura");
     	fileAssinatura.write(s.sign());
     	fileAssinatura.close();
     	file.close();
-        System.out.println("Deu certo");
+        System.out.println();
         return true;
 
     }
