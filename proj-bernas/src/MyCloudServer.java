@@ -101,6 +101,10 @@ public class MyCloudServer {
                         cFunction();
                     case "-g":
                         gFunction();
+                    case "-s":
+                        sFunction();
+                    case "-e":
+                        eFuction();
                 }
             } catch (IOException | ClassNotFoundException | NoSuchAlgorithmException e) {
                 e.printStackTrace();
