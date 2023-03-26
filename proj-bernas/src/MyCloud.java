@@ -1,124 +1,177 @@
-import java.io.BufferedReader;
+import javax.crypto.BadPaddingException;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import java.io.File;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.net.Socket;
-import java.net.UnknownHostException;
+import java.security.*;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Objects;
 import java.util.Set;
-import java.io.FileInputStream;  
-import java.io.FileOutputStream;
-import java.security.KeyStore;
-
-import javax.crypto.Cipher;
-import javax.crypto.CipherOutputStream;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
-import java.security.cert.Certificate;
-
 
 public class MyCloud {
 
-    private Socket socket;
+    private Socket clientSocket;
+    private ArrayList<File> files = new ArrayList<>();
 
-    public static void main(String[] args) {
-        checkMyCloudArgs(args);
-        MyCloud m = new MyCloud();
+    private KeyPair clientKeyPair;
+    private static ObjectOutputStream objectOutputStream = null;
+    private static ObjectInputStream objectInputStream = null;
+
+    public static void main(String[] args) throws IOException, NoSuchAlgorithmException, IllegalBlockSizeException, BadPaddingException {
+        MyCloud m = new MyCloud(args);
     }
 
-    private static ArrayList checkMyCloudArgs(String[] args) {
+    public MyCloud(String[] args) throws IOException, NoSuchAlgorithmException, IllegalBlockSizeException, BadPaddingException {
+
+        ArrayList<Object> checked = checkMyCloudArgs(args);
+
+        if (checked.get(0).equals(false)) {
+            System.out.println(checked.get(1));
+            System.exit(0);
+        }
+
+        try {
+            System.out.println("Client Started");
+
+            String server = (String) checked.get(2);
+            int port = Integer.parseInt((String) checked.get(3));
+
+            try {
+                this.clientSocket = new Socket(server, port);
+                System.out.println("Client connected");
+                objectOutputStream = new ObjectOutputStream(this.clientSocket.getOutputStream());
+                objectInputStream = new ObjectInputStream(this.clientSocket.getInputStream());
+
+            } catch (IOException e) {
+                System.out.println("Server não esta ativo.");
+                throw new RuntimeException(e);
+            }
+
+
+            System.out.println("Sending Data...");
+
+            System.out.println(checked.get(4));
+
+            switch ((String) checked.get(4)) {
+                case "-c":
+                    cFunction();
+            }
+        } catch (IOException | ClassNotFoundException | NoSuchPaddingException | InvalidKeyException |
+                 InvalidAlgorithmParameterException | NoSuchProviderException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
+    private ArrayList<Object> checkMyCloudArgs(String[] args) {
+
 
         //from (-a 127.0.0.1:5000 -_ filename) to (-a 127.0.0.1 5000 -_ filename)
-        ArrayList sendToServer = new ArrayList<>();
+        ArrayList<Object> sendToServer = new ArrayList<>();
+
+        sendToServer.add(true);
 
         Set<String> argOptions = Set.of("-c", "-s", "-e", "-g");
 
-        if (args[0] != "-a") {
-            String error = "Tem de identificar o servidor ao qual quer-se conectar";
+        StringBuilder error = new StringBuilder();
 
-        } else {
-            sendToServer.add(args[0]);
-        }
-
-        String[] serverId = args[1].split(":");
-
-        if (serverId.length != 2) {
-            String error = "Verifique se o hostname está correto";
-        } else {
-            sendToServer.add(serverId[0]);
-            sendToServer.add(serverId[1]);
-        }
-
-        if (!argOptions.contains(args[2])) {
-            String error = "Verifique os argumentos dados { -c, -s, -e, -g }";
-        } else {
-              sendToServer.add(args[2]);
-        }
-
-        //for ()
+        int counter = 0;
 
 
+        try {
+            if (!Objects.equals(args[0], "-a")) {
+                counter += 1;
+                error.append(" Tem de identificar o servidor ao qual quer-se conectar, -a hostname.");
 
-
-
-        return null;
-    }
-
-    public boolean handleS (ArrayList listOfFiles){
-        for(int i=0;i<listOfFiles.length();i++){
-            File file = new File(listOfFiles.get(i));
-            //Verifico se ficheiro existe e se é um ficheiro        
-            if (file.exists() && file.isFile()) {
-                assina(listOfFiles.get(i));
             } else {
-                String error = "File "+listOfFiles.get(i)+" not found";
-                return false;
+                sendToServer.add(args[0]);
             }
-        }  
-        return true;
-    } 
 
-    private boolean assina(String fileName){
-        FileInputStream kfile = new FileInputStream("keystore.si");
-        KeyStore kstore = KeyStore.getInstance("PKCS12");
-        kstore.load(kfile,"123456".toCharArray());
-        Key myPrivateKey = kstore.getKey("si", "123456".toCharArray());
+            String[] serverId = args[1-counter].split(":");
 
-        try {
-            FileInputStream file = new FileInputStream(fileName);            
-        } catch (Exception e) {
-            String error = "File not found";
+            if (serverId.length != 2) {
+                counter += 1;
+                error.append(" Verifique se o hostname está correto.");
+            } else {
+                sendToServer.add(serverId[0]);
+                sendToServer.add(serverId[1]);
+            }
+
+            if (!argOptions.contains(args[2-counter])) {
+                error.append(" Verifique os argumentos dados { -c, -s, -e, -g }.");
+            } else {
+                sendToServer.add(args[2-counter]);
+            }
+            this.files.clear();
+
+            if (error.isEmpty()) {
+                for (int x = 3; x < args.length; x++) {
+                    File file = new File(args[x]);
+                    if (!file.exists()) {
+                        System.out.println("Ficheiro "+ args[x] + " nao existe");
+                    } else {
+                        this.files.add(file);
+                    }
+                }
+            }
+
+        } catch (ArrayIndexOutOfBoundsException e) {
+            error.append("Não indicou argumentos");
         }
-    	byte[] buffer = new byte[16];
 
-        Signature s = Signature.getInstance("SHA256withRSA");
-    	s.initSign((PrivateKey) myPrivateKey);
-    	int n;
-    	while((n = file.read(buffer))!=-1) {
-    		s.update(buffer,0,n);
-    	}
-    	FileOutputStream fileAssinatura = new FileOutputStream("a.assinatura");
-    	fileAssinatura.write(s.sign());
-    	fileAssinatura.close();
-    	file.close();
-
-        return true;
+        if (error.toString().equals("")) {
+            return sendToServer;
+        } else {
+            return new ArrayList<>(Arrays.asList(false, error.toString()));
+        }
 
     }
 
-    public MyCloud() {
-        try {
-            System.out.println("Client Started");
-            this.socket = new Socket("localhost", 1234);
+    private void cFunction () throws IOException, NoSuchAlgorithmException, ClassNotFoundException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException, InvalidAlgorithmParameterException, NoSuchProviderException {
+        ArrayList<File> filesToServer = new ArrayList<>();
 
+        objectOutputStream.writeObject("-c");
 
-
-        } catch (UnknownHostException e) {
-            throw new RuntimeException(e);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        if (this.clientKeyPair == null) {
+            this.clientKeyPair = CryptoUtils.generateKeyPair();
         }
-    }
 
-    private void startMyCloud(){
+        Key symKey = CryptoUtils.generateSymmetricKey();
+
+        objectOutputStream.writeObject(files.size());
+        for (File f: this.files) {
+            objectOutputStream.writeObject(f.getName());
+            boolean boolFileInServer = (boolean) objectInputStream.readObject();
+            if (boolFileInServer) {
+                filesToServer.add(f);
+
+            }
+        }
+
+        byte[] wrappedKey = CryptoUtils.encryptKey(symKey, this.clientKeyPair.getPublic());
+
+        objectOutputStream.writeObject(filesToServer.size());
+        for (File f: filesToServer) {
+            byte[] dataToSend = CryptoUtils.encryptFile(f, symKey);
+            objectOutputStream.writeObject(f.getName());
+            objectOutputStream.writeObject(dataToSend);
+            objectOutputStream.writeObject(wrappedKey);
+
+
+        }
+
+
+
+
+
+
+
+
+
 
     }
 }
