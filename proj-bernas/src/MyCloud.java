@@ -25,6 +25,7 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import java.security.cert.Certificate;
 import java.util.Arrays;
+import java.util.List;
 public class MyCloud {
 
     private Socket clientSocket;
@@ -68,11 +69,15 @@ public class MyCloud {
             System.out.println("Sending Data...");
 
             System.out.println(checked.get(4));
-
+            String[] files = args[2].split(" ");
+            List<String> listOfFiles = new ArrayList<String>(Arrays.asList(files));    
             switch ((String) checked.get(4)) {
                 case "-c":
                     cFunction();
-            }
+                case "-s":
+                    List<File> filesToSend = sFunction(listOfFiles);
+        
+                }
         } catch (IOException | ClassNotFoundException | NoSuchPaddingException | InvalidKeyException |
                  InvalidAlgorithmParameterException | NoSuchProviderException e) {
             throw new RuntimeException(e);
@@ -141,12 +146,6 @@ public class MyCloud {
         } else {
             return new ArrayList<>(Arrays.asList(false, error.toString()));
         }
-        String[] files = args[2].split(" ");
-        ArrayList<String> listOfFiles = new ArrayList<String>(Arrays.asList(files));
-        switch(args[2]){
-            case "-s":
-                handleS(listOfFiles);
-        } 
 
     }
 
@@ -185,53 +184,60 @@ public class MyCloud {
 
     }
     
-    public static void handleS(ArrayList<String> listOfFiles) {
-        for (int i = 0; i < listOfFiles.size(); i++) {
-            File file = new File(listOfFiles.get(i));
-            // Verifico se ficheiro existe e se é um ficheiro        
-            if (file.exists() && file.isFile()) {
-                try {
-                    assina(listOfFiles.get(i));
-                } catch (Exception e) {
-                    System.err.println("Erro ao assinar arquivo " + listOfFiles.get(i) + ": " + e.getMessage());
-                    break;
-                }
-            } else {
-                System.err.println("Arquivo " + listOfFiles.get(i) + " não encontrado ou não é um arquivo.");
-                break;
-            }
-        }
-        
-    }
-    
-    private static boolean assina (String fileName)throws Exception{
-        FileInputStream kfile = new FileInputStream("keystore.si");
-        KeyStore kstore = KeyStore.getInstance("PKCS12");
-        kstore.load(kfile,"123456".toCharArray());
-        Key myPrivateKey = kstore.getKey("si", "123456".toCharArray());
+    public static List<File> sFunction(List<String> listOfFiles)throws Exception{
+        List<File> filesToSend = new ArrayList<>();
+        FileInputStream keyFile = new FileInputStream("keystore.si");
+        KeyStore keyStore = KeyStore.getInstance("PKCS12");
+        keyStore.load(keyFile, "123456".toCharArray());
+        Key myPrivateKey = keyStore.getKey("si", "123456".toCharArray());
 
         FileInputStream file = null;
-        try {
-            file = new FileInputStream(fileName);
-        } catch (Exception e) {
-            String error = "File not found";
+        for (String fileName : listOfFiles) {
+            try {
+                file = new FileInputStream(fileName);
+            }catch(Exception e){String error = "File not found";}
+
+            byte[] buffer = new byte[16];
+
+            Signature signature = Signature.getInstance("SHA256withRSA");
+            signature.initSign((PrivateKey) myPrivateKey);
+            int n;
+            while ((n = file.read(buffer)) != -1) {
+                signature.update(buffer, 0, n);
+            }
+
+            // cria um novo arquivo para a assinatura
+            FileOutputStream signatureFile = new FileOutputStream(fileName + ".assinatura");
+
+            // escreve a assinatura no arquivo
+            signatureFile.write(signature.sign());
+
+            // fecha o arquivo
+            signatureFile.close();
+
+            // cria um novo arquivo para o arquivo assinado
+            FileOutputStream signedFile = new FileOutputStream(fileName + ".assinado");
+
+            // escreve o conteúdo do arquivo original no arquivo assinado
+            FileInputStream originalFile = new FileInputStream(fileName);
+            while ((n = originalFile.read(buffer)) != -1) {
+                signedFile.write(buffer, 0, n);
+            }
+
+            // escreve a assinatura no final do arquivo assinado
+            signedFile.write(signature.sign());
+
+            // fecha o arquivo
+            signedFile.close();
+            originalFile.close();
+            file.close();
+            File f = new File(fileName+".assinado");
+            File f2 = new File(fileName+".assinatura");
+
+            filesToSend.add(f);
+            filesToSend.add(f2);
         }
-        
-    	byte[] buffer = new byte[16];
-
-        Signature s = Signature.getInstance("SHA256withRSA");
-    	s.initSign((PrivateKey) myPrivateKey);
-    	int n;
-    	while((n = file.read(buffer))!=-1) {
-    		s.update(buffer,0,n);
-    	}
-    	FileOutputStream fileAssinatura = new FileOutputStream("a.assinatura");
-    	fileAssinatura.write(s.sign());
-    	fileAssinatura.close();
-    	file.close();
-        System.out.println();
-        return true;
-
+        return filesToSend;
     }
 
 }
